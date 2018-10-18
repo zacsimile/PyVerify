@@ -1,0 +1,62 @@
+?start: program
+?add: aexp "+" aexp
+?sub: aexp "-" aexp
+    | "-" aexp
+?div: aexp "/" aexp
+?mult: aexp "*" aexp
+?mod: aexp "%" aexp
+?read: NAME "[" aexp "]"
+?aexp: NUMBER
+    | NAME
+    | read
+    | add
+    | sub
+    | mult
+    | div
+    | mod
+    | "(" aexp ")"
+?eq: aexp "=" aexp
+?neq: aexp "!=" aexp
+?leq: aexp "<=" aexp
+?geq: aexp ">=" aexp
+?lt: aexp "<" aexp
+?gt: aexp ">" aexp
+?comp: eq
+    | neq
+    | leq
+    | geq
+    | lt
+    | gt
+?not: "!" bexp
+?or: bexp "||" bexp
+?and: bexp "&&" bexp
+?bexp: comp
+    | not
+    | or
+    | and
+    | "(" bexp ")"
+?assign: NAME ":=" aexp ";"
+    | parassign
+    | write
+?parassign: NAME "," NAME ":=" aexp "," aexp ";"
+?write: NAME "[" aexp "]" ":=" aexp ";"
+?if: "if" bexp "then" block "else" block "end"
+    | "if" bexp "then" block "end"
+?while: "while" bexp [ "inv" assn ]+ "do" block "end"
+?stmt: assign
+    | if
+    | while
+?block: stmt+
+?program: "program" NAME [ "pre" assn ] [ "post" assn ] "is" [block] "end"
+?assn: comp
+    | "!" assn
+    | assn "||" assn
+    | assn "&&" assn
+    | assn "==>" assn
+    | "forall" [ NAME ] "," assn
+    | "exists" [ NAME ] "," assn
+    | "(" assn ")"
+%import common.CNAME -> NAME
+%import common.NUMBER
+%import common.WS
+%ignore WS
