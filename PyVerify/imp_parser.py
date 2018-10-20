@@ -1,5 +1,6 @@
 import sys
 from lark import Lark, Transformer, Tree
+from lark.lexer import Token
 
 
 class ImpParser:
@@ -98,12 +99,14 @@ class ImpToGC(Transformer):
 
     def assign(self, a):
         self.tmpcount += 1
-        return [Tree('assume', Tree('eq', [Tree('NAME', 'tmp_' + str(self.tmpcount)), a[0]])), Tree('havoc', a[0]),
-                Tree('assume', Tree('eq', [a[0], Tree('replace', [a[1], Tree('NAME', 'tmp_' + str(self.tmpcount)), a[0]])]))]
+        varstring = 'tmp_' + str(self.tmpcount)
+        return [Tree('assume', Tree('eq', [Token('NAME', varstring), a[0]])), Tree('havoc', a[0]),
+                Tree('assume', Tree('eq', [a[0], Tree('replace', [a[1], Token('NAME', varstring), a[0]])]))]
 
     def write(self, a):
         self.tmpcount += 1
-        return [Tree('assume', Tree('eq', [Tree('NAME', 'tmp_' + str(self.tmpcount)), a[0]])), Tree('havoc', a[0]),
+        varstring = 'tmp_' + str(self.tmpcount)
+        return [Tree('assume', Tree('eq', [Token('NAME', varstring), a[0]])), Tree('havoc', a[0]),
                 Tree('assume', Tree('eq', [a[0], Tree('write', ['tmp_' + str(self.tmpcount), a[1], a[2]])]))]
 
     def inv(self, i):
@@ -119,7 +122,7 @@ class ImpToGC(Transformer):
             return Tree('choice', [Tree('assume', b[0]), b[1]], [Tree('assume', self._not(b[0])), b[2]])
 
     def neg(self, n):
-        return Tree('sub', [Tree('NUMBER', 0), n])
+        return Tree('sub', [Token('NUMBER', 0), n])
 
     def whilestmt(self, w):
         out = []
