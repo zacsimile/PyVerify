@@ -1,7 +1,7 @@
 ?start: program
 ?add: aexp "+" aexp
 ?sub: aexp "-" aexp
-    | "-" aexp
+    | "-" aexp -> neg
 ?div: aexp "/" aexp
 ?mult: aexp "*" aexp
 ?mod: aexp "%" aexp
@@ -40,14 +40,17 @@
     | write
 ?parassign: NAME "," NAME ":=" aexp "," aexp ";"
 ?write: NAME "[" aexp "]" ":=" aexp ";"
-?if: "if" bexp "then" block "else" block "end"
+?ifstmt: "if" bexp "then" block "else" block "end"
     | "if" bexp "then" block "end"
-?while: "while" bexp [ "inv" assn ]+ "do" block "end"
+?inv: "inv" assn -> inv
+?whilestmt: "while" bexp [ inv ]+ "do" block "end"
 ?stmt: assign
-    | if
-    | while
+    | ifstmt
+    | whilestmt
 ?block: stmt+
-?program: "program" NAME [ "pre" assn ] [ "post" assn ] "is" [block] "end"
+?pre: "pre" assn -> pre
+?post: "post" assn -> post
+?program: "program" NAME [ pre ] [ post ] "is" [block] "end"
 ?assn: comp
     | "!" assn
     | assn "||" assn
