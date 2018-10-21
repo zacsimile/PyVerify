@@ -27,37 +27,38 @@
     | geq
     | lt
     | gt
-?not: "!" bexp
-?or: bexp "||" bexp
-?and: bexp "&&" bexp
+?not.2: "!" bexp
+?or.4: bexp "||" bexp
+?and.3: bexp "&&" bexp
+?paren.1: "(" bexp ")"
 ?bexp: comp
     | not
     | or
     | and
-    | "(" bexp ")"
+    | paren
 ?assign: NAME ":=" aexp ";"
     | parassign
     | write
 ?parassign: NAME "," NAME ":=" aexp "," aexp ";"
-?write: NAME "[" aexp "]" ":=" aexp ";"
+?write: NAME "[" aexp "] :=" aexp ";"
 ?ifstmt: "if" bexp "then" block "else" block "end"
     | "if" bexp "then" block "end"
 ?inv: "inv" assn -> inv
-?whilestmt: "while" bexp [ inv ]+ "do" block "end"
+?whilestmt: "while" bexp inv* "do" block "end"
 ?stmt: assign
     | ifstmt
     | whilestmt
-?block: stmt+
+?block: stmt*
 ?pre: "pre" assn -> pre
 ?post: "post" assn -> post
-?program: "program" NAME [ pre ] [ post ] "is" [block] "end"
+?program: "program" NAME pre* post* "is" block "end"
 ?assn: comp
     | "!" assn
     | assn "||" assn
     | assn "&&" assn
     | assn "==>" assn
-    | "forall" [ NAME ] "," assn
-    | "exists" [ NAME ] "," assn
+    | "forall" NAME* "," assn
+    | "exists" NAME* "," assn
     | "(" assn ")"
 %import common.CNAME -> NAME
 %import common.NUMBER
