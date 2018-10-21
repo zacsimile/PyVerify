@@ -27,15 +27,15 @@
     | geq
     | lt
     | gt
-?not.2: "!" bexp
-?or.4: bexp "||" bexp
-?and.3: bexp "&&" bexp
-?paren.1: "(" bexp ")"
+?bnot.2: "!" bexp
+?bor.4: bexp "||" bexp
+?band.3: bexp "&&" bexp
+?bparen.1: "(" bexp ")"
 ?bexp: comp
-    | not
-    | or
-    | and
-    | paren
+    | bnot
+    | bor
+    | band
+    | bparen
 ?assign: NAME ":=" aexp ";"
     | parassign
     | write
@@ -53,13 +53,13 @@
 ?post: "post" assn -> post
 ?program: "program" NAME pre* post* "is" block "end"
 ?assn: comp
-    | "!" assn
-    | assn "||" assn
-    | assn "&&" assn
-    | assn "==>" assn
-    | "forall" NAME* "," assn
-    | "exists" NAME* "," assn
-    | "(" assn ")"
+    | "!" assn -> bnot
+    | assn "||" assn -> bor
+    | assn "&&" assn -> band
+    | assn "==>" assn -> implies
+    | "forall" NAME* "," assn -> forall
+    | "exists" NAME* "," assn -> exists
+    | "(" assn ")" -> bparen
 %import common.CNAME -> NAME
 %import common.NUMBER
 %import common.WS
