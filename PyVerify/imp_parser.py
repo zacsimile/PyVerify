@@ -37,7 +37,7 @@ class ImpParser:
         data = stream.read()
         stream.close()
 
-        print(data)
+        #print(data)
 
         # Parse the commands to an AST
         ast = self.parse(data)
@@ -436,10 +436,10 @@ class VcToSMT(Transformer):
         return "(mod " + ' '.join(str(v) for v in m) + ")"
 
     def bparen(self, b):
-        return "(" + ' '.join(str(v) for v in b) + ")"
+        return ''.join(str(v) for v in b)
 
     def forall(self, f):
-        return "(forall " + ' '.join('(%s Int)' % v for v in f[:-1]) + ' ' + str(f[-1]) + ')'
+        return "(forall (" + ' '.join('(%s Int)' % v for v in f[:-1]) + ') ' + str(f[-1]) + ')'
 
     def const_false(self, f):
         return "false"
@@ -447,19 +447,45 @@ class VcToSMT(Transformer):
     def const_true(self, t):
         return "true"
 
+    def program(self, p):
+        return '(assert ' + ' '.join(str(v) for v in p) + ')(check-sat)(exit)'
+
+def get_variables(vc):
+    out = []
+    for t in list(vc.iter_subtrees()):
+        for a in t.children:
+            try:
+                if a.type == 'NAME':
+                    out.extend([a])
+            except AttributeError:
+                pass
+    return ' '.join('(declare-fun %s () Int)' % v for v in list(set(out)))
+
 if __name__ == '__main__':
     imp_parser = ImpParser()
     tree = imp_parser.parse_file(sys.argv[1])
     try:
         #print(tree.pretty())
         gc = ImpToGC().transform(tree)
-        print(gc.pretty())
+        #print(gc.pretty())
         #print(gc)
         #print(wpify(gc).pretty())
         #print(ComputeWP().compute(gc.children))
         vc = WpCalc().wpify(gc, Token('const_true', True))
+        var_string = get_variables(vc)
         #print(vc.pretty())
-        print(VcToSMT().transform(vc))
+        vc_string = VcToSMT().transform(vc)
+        vc_string = vc_string.replace('False', 'false')
+        vc_string = vc_string.replace('True', 'true')
+        program = var_string + "(assert " + vc_string + ") (check-sat) (exit)"
+        with open('current.smt2', 'w') as file:
+            file.write(program)
+        import subprocess
+        res = subprocess.check_output("z3 current.smt2", shell=True)
+        if res.strip() == b'sat':
+            print("valid")
+        else:
+            print("invalid")
         #print(gc.pretty())
         #print(str(wp) + '\n')
         # vc = gc + ', true'
