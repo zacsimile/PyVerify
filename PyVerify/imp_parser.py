@@ -478,13 +478,16 @@ if __name__ == '__main__':
         vc_string = vc_string.replace('False', 'false')
         vc_string = vc_string.replace('True', 'true')
         program = var_string + "(assert " + vc_string + ") (check-sat) (exit)"
-        with open('current.smt2', 'w') as file:
-            file.write(program)
+        with open('current.smt2', 'w') as fp:
+            fp.write(program)
         import subprocess
-        res = subprocess.check_output("z3 current.smt2", shell=True)
-        if res.strip() == b'sat':
-            print("valid")
-        else:
+        try:
+            res = subprocess.check_output("z3 current.smt2", shell=True)
+            if res.strip() == b'sat':
+                print("valid")
+            else:
+                print("invalid")
+        except subprocess.CalledProcessError:
             print("invalid")
         #print(gc.pretty())
         #print(str(wp) + '\n')
@@ -502,6 +505,5 @@ if __name__ == '__main__':
         #         vc_nested = 'wp(' + vc_new + ', ' + vc_nested + ')'
         #     vc_prev = vc_new
         # print(vc_nested)
-
     except AttributeError:
         raise
