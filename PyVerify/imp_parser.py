@@ -248,14 +248,23 @@ class ImpToGC(Transformer):
         """
         return self.assign([a[0], Tree('write', a)])
 
+    def flatten(self, l):
+        out = []
+        for a in l:
+            if type(a) == Tree or type(a) == Token:
+                out.extend([a])
+            else:
+                out.extend(a)
+        return out
+
     def whilestmt(self, w):
         """
         Convert while statement to guarded command.
         """
         invs = self.assemble_invariants(w)
-        b = [Tree('assert', invs), self.assemble_havoc(w), Tree('assume', invs),
+        b = self.flatten([Tree('assert', invs), self.assemble_havoc(w), Tree('assume', invs),
              Tree('wpor', [Tree('block', [Tree('assume', [w[0]]), w[-1], Tree('assert', invs), Tree('assume', [Token('const_false', False)])]),
-                           Tree('assume', self._not(w[0]))])]
+                           Tree('assume', self._not(w[0]))])])
         out = []
         for v in b:
             if isinstance(type(v), type(None)):
@@ -343,22 +352,31 @@ class WpCalc:
                     out.extend([Token(v.type, v.value)])
             if type(v) == Tree:
                 out.extend([Tree(v.data, self.replacetree(v, find_token, replace_token))])
-        print(out)
+        #print(out)
+        return out
+
+    def flatten(self, l):
+        out = []
+        for a in l:
+            if type(a) == Tree or type(a) == Token:
+                out.extend([a])
+            else:
+                out.extend(a)
         return out
 
     def wpify(self, gc, wp):
         #print(wp)
         if type(gc) == Tree:
             if gc.data == 'assert':
-                return Tree('band', [gc.children, wp])
+                return Tree('band', self.flatten([gc.children, wp]))
             if gc.data == 'assume':
-                return Tree('implies', [gc.children, wp])
-            # if gc.data == 'havoc':
-            #     self.tmpcount += 1
-            #     varstring = 'pa_' + str(self.tmpcount)
-            #     return self.wpify(gc, self.replacetree(wp, gc.children[0], varstring))
+                return Tree('implies', self.flatten([gc.children, wp]))
+            if gc.data == 'havoc':
+                self.tmpcount += 1
+                varstring = 'pa_' + str(self.tmpcount)
+                return self.wpify(gc.children, self.replacetree(wp, gc.children[0], varstring))
             if gc.data == 'wpor':
-                return Tree('band', [self.wpify(gc.children[0], wp), self.wpify(gc.children[1], wp)])
+                return Tree('band', self.flatten([self.wpify(gc.children[0], wp), self.wpify(gc.children[1], wp)]))
             else:
                 return self.wpify(gc.children, wp)
         if type(gc) == list:
@@ -408,6 +426,21 @@ class VcToSMT(Transformer):
     def add(self, a):
         return "(+ " + ' '.join(str(v) for v in a) + ")"
 
+    def sub(self, s):
+        return "(- " + ' '.join(str(v) for v in s) + ")"
+
+    def div(self, d):
+        return "(div " + ' '.join(str(v) for v in d) + ")"
+
+    def mod(self, m):
+        return "(mod " + ' '.join(str(v) for v in m) + ")"
+
+    def bparen(self, b):
+        return "(" + ' '.join(str(v) for v in b) + ")"
+
+    def forall(self, f):
+        return "(forall " + ' '.join('(%s Int)' % v for v in f[:-1]) + ' ' + str(f[-1]) + ')'
+
     def const_false(self, f):
         return "false"
 
@@ -424,8 +457,9 @@ if __name__ == '__main__':
         #print(gc)
         #print(wpify(gc).pretty())
         #print(ComputeWP().compute(gc.children))
-        #vc = WpCalc().wpify(gc, Token('const_true', True))
-        #print(VcToSMT().transform(vc))
+        vc = WpCalc().wpify(gc, Token('const_true', True))
+        #print(vc.pretty())
+        print(VcToSMT().transform(vc))
         #print(gc.pretty())
         #print(str(wp) + '\n')
         # vc = gc + ', true'
