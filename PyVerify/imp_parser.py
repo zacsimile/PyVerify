@@ -11,7 +11,7 @@ class ImpParser:
         """
         Lark parser, activate!
         """
-        self.imp_parser = Lark.open('imp.lark', parser='lalr', lexer='standard')
+        self.imp_parser = Lark.open('imp.lark', parser='earley', lexer='standard')
 
     def parse_file(self, fn):
         """
@@ -73,29 +73,29 @@ class ImpToGC(Transformer):
         if type(b) == list:
             out = []
             for t in b:
-                out.append(self._not(t))
+                out.extend(self._not(t))
             return out
 
         if b.data == 'bparen':
             return self._not(b.children)
         if b.data == 'eq':
-            return Tree('neq', b.children)
+            return [Tree('neq', b.children)]
         if b.data == 'neq':
-            return Tree('eq', b.children)
+            return [Tree('eq', b.children)]
         if b.data == 'geq':
-            return Tree('lt', b.children)
+            return [Tree('lt', b.children)]
         if b.data == 'lt':
-            return Tree('geq', b.children)
+            return [Tree('geq', b.children)]
         if b.data == 'leq':
-            return Tree('gt', b.children)
+            return [Tree('gt', b.children)]
         if b.data == 'gt':
-            return Tree('leq', b.children)
+            return [Tree('leq', b.children)]
         if b.data == 'bor':
-            return Tree('band', self._not(b.children))
+            return [Tree('band', self._not(b.children))]
         if b.data == 'band':
-            return Tree('bor', self._not(b.children))
+            return [Tree('bor', self._not(b.children))]
         if b.data == 'not':
-            return b.children
+            return [b.children]
         else:
             # Do not fail silently
             print(b)
@@ -113,9 +113,10 @@ class ImpToGC(Transformer):
             previous = pre.pop()
             while len(pre) > 0:
                 current = pre.pop()
-                previous = Tree('band', [current, previous])
-            return previous
-        return pre
+                previous = [Tree('band', [current, previous])]
+            return Tree('assume', previous)
+        if len(pre) == 1:
+            return Tree('assume', pre)
 
     def assemble_post(self, l):
         """
@@ -129,9 +130,9 @@ class ImpToGC(Transformer):
             postvious = post.pop()
             while len(post) > 0:
                 current = post.pop()
-                postvious = Tree('band', [current, postvious])
-            return postvious
-        return post
+                postvious = [Tree('band', [current, postvious])]
+            return Tree('assert', postvious)
+        return Tree('assert', post)
 
     def assemble_invariants(self, l):
         """
@@ -145,7 +146,7 @@ class ImpToGC(Transformer):
             invious = inv.pop()
             while len(inv) > 0:
                 current = inv.pop()
-                invious = Tree('band', [current, invious])
+                invious = [Tree('band', [current, invious])]
             return invious
         return inv
 
@@ -236,9 +237,9 @@ class ImpToGC(Transformer):
                 continue
             if type(v) == list:
                 for a in v:
-                    out.append(a)
+                    out.extend([a])
             else:
-                out.append(v)
+                out.extend([v])
         return Tree('block', out)
 
     def write(self, a):
@@ -252,19 +253,20 @@ class ImpToGC(Transformer):
         Convert while statement to guarded command.
         """
         invs = self.assemble_invariants(w)
-        b = [Tree('assert', [invs]), self.assemble_havoc(w), Tree('assume', [invs]),
-             Tree('wpor', [Tree('block', [Tree('assume', [w[0]]), w[-1], Tree('assert', [invs]), Tree('assume', [Token('NUMBER', 0)])]),
-                   Tree('assume', [self._not(w[0])])])]
+        b = [Tree('assert', invs), self.assemble_havoc(w), Tree('assume', invs),
+             Tree('wpor', [Tree('block', [Tree('assume', [w[0]]), w[-1], Tree('assert', invs), Tree('assume', [Token('const_false', False)])]),
+                           Tree('assume', self._not(w[0]))])]
         out = []
         for v in b:
             if isinstance(type(v), type(None)):
                 continue
             if type(v) == list:
                 for a in v:
-                    out.append(a)
+                    out.extend([a])
             else:
-                out.append(v)
-        return out
+                out.extend([v])
+        if len(out) > 0:
+            return out
 
     def ifstmt(self, i):
         b = [Tree('assume', [i[0]]), i[1]]
@@ -274,12 +276,12 @@ class ImpToGC(Transformer):
                 continue
             if type(v) == list:
                 for a in v:
-                    out.append(a)
+                    out.extend([a])
             else:
-                out.append(v)
+                out.extend([v])
         if len(i) > 2:
             out = Tree('wpor', [Tree('block', [Tree('assume', [i[0]]), i[1]]),
-                              Tree('block', [Tree('assume', [self._not(i[0])]), i[2]])])
+                                Tree('block', [Tree('assume', self._not(i[0])), i[2]])])
         return out
 
     def program(self, p):
@@ -310,13 +312,107 @@ class ImpToGC(Transformer):
     def neg(self, n):
         return Tree('sub', [Token('NUMBER', 0), n[0]])
 
-class GcToWp(Transformer):
+class WpCalc:
+    def __init__(self):
+        self.tmpcount = -1
 
-    def wp(self, wp):
-        print(wp)
+    def replacetree(self, t, find_token, replace_token):
+        """
+        Recursively iterate through tree t and replace find_token with replace_token. Used for replacement rule.
 
-def wpify(gc):
-    return Tree('wp', [gc, True])
+        Parameters
+        ----------
+        t : Tree
+            A tree over which to iterate.
+        find_token : Token
+            Variable to find.
+        replace_token : str
+            Replacement variable.
+
+        Returns
+        -------
+        Tree
+            Tree with replaced token.
+        """
+        out = []
+        for v in t.children:
+            if type(v) == Token:
+                if v.value == find_token.value:
+                    out.extend([Token('NAME', replace_token)])
+                else:
+                    out.extend([Token(v.type, v.value)])
+            if type(v) == Tree:
+                out.extend([Tree(v.data, self.replacetree(v, find_token, replace_token))])
+        print(out)
+        return out
+
+    def wpify(self, gc, wp):
+        #print(wp)
+        if type(gc) == Tree:
+            if gc.data == 'assert':
+                return Tree('band', [gc.children, wp])
+            if gc.data == 'assume':
+                return Tree('implies', [gc.children, wp])
+            # if gc.data == 'havoc':
+            #     self.tmpcount += 1
+            #     varstring = 'pa_' + str(self.tmpcount)
+            #     return self.wpify(gc, self.replacetree(wp, gc.children[0], varstring))
+            if gc.data == 'wpor':
+                return Tree('band', [self.wpify(gc.children[0], wp), self.wpify(gc.children[1], wp)])
+            else:
+                return self.wpify(gc.children, wp)
+        if type(gc) == list:
+            try:
+                current = gc.pop()
+                return self.wpify(gc, self.wpify(current, wp))
+            except IndexError:
+                return wp
+        if type(gc) == Token:
+            return wp
+
+class VcToSMT(Transformer):
+
+    def read(self, r):
+        return "(select " + ' '.join(str(v) for v in r) + ")"
+
+    def write(self, w):
+        return "(store " + ' '.join(str(v) for v in w) + ")"
+
+    def implies(self, i):
+        return "(=> " + ' '.join(str(v) for v in i) + ")"
+
+    def band(self, a):
+        return "(and " + ' '.join(str(v) for v in a) + ")"
+
+    def eq(self, e):
+        return "(= " + ' '.join(str(v) for v in e) + ")"
+
+    def neq(self, e):
+        return "(not (= " + ' '.join(str(v) for v in e) + "))"
+
+    def gt(self, ge):
+        return "(> " + ' '.join(str(v) for v in ge) + ")"
+
+    def lt(self, le):
+        return "(< " + ' '.join(str(v) for v in le) + ")"
+
+    def geq(self, ge):
+        return "(>= " + ' '.join(str(v) for v in ge) + ")"
+
+    def leq(self, le):
+        return "(<= " + ' '.join(str(v) for v in le) + ")"
+
+    def mult(self, m):
+        return "(* " + ' '.join(str(v) for v in m) + ")"
+
+    def add(self, a):
+        return "(+ " + ' '.join(str(v) for v in a) + ")"
+
+    def const_false(self, f):
+        return "false"
+
+    def const_true(self, t):
+        return "true"
 
 if __name__ == '__main__':
     imp_parser = ImpParser()
@@ -325,6 +421,11 @@ if __name__ == '__main__':
         #print(tree.pretty())
         gc = ImpToGC().transform(tree)
         print(gc.pretty())
+        #print(gc)
+        #print(wpify(gc).pretty())
+        #print(ComputeWP().compute(gc.children))
+        #vc = WpCalc().wpify(gc, Token('const_true', True))
+        #print(VcToSMT().transform(vc))
         #print(gc.pretty())
         #print(str(wp) + '\n')
         # vc = gc + ', true'
@@ -344,10 +445,3 @@ if __name__ == '__main__':
 
     except AttributeError:
         raise
-        #print('imp attribute error')
-        #print(tree)
-    # vc_parser = Lark.open('vc.lark', parser='earley', lexer='standard')
-    # try:
-    #     print(vc_parser.parse(vc_nested).pretty())
-    # except AttributeError:
-    #     print('vc attribute error')
