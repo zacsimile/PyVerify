@@ -11,7 +11,7 @@ class ImpParser:
         """
         Lark parser, activate!
         """
-        self.imp_parser = Lark.open('imp.lark', parser='earley', lexer='standard')
+        self.imp_parser = Lark.open('imp.lark', parser='lalr', lexer='standard')
 
     def parse_file(self, fn):
         """
@@ -159,7 +159,7 @@ class ImpToGC(Transformer):
                 if t.data == 'havoc':
                     hav.extend([Tree('havoc', t.children)])
                 else:
-                    hav.extend(self.assemble_havoc([t.children]))
+                    hav.extend(self.assemble_havoc(t.children))
             if type(t) == list:
                 hav.extend(self.assemble_havoc(t))
         return hav
@@ -209,17 +209,17 @@ class ImpToGC(Transformer):
         self.tmpcount += 1
         varstring = 'tmp_' + str(self.tmpcount)
         out = []
-        out.append(Tree('assume', Tree('eq', [Token('NAME', varstring), Token(a[0].type, a[0].value)])))
-        out.append(Tree('havoc', Token(a[0].type, a[0].value)))
+        out.append(Tree('assume', [Tree('eq', [Token('NAME', varstring), Token(a[0].type, a[0].value)])]))
+        out.append(Tree('havoc', [Token(a[0].type, a[0].value)]))
         if type(a[1]) == Tree:
             replacetree = Tree(a[1].data, self.replacetree(a[1], a[0], varstring))
-            out.append(Tree('assume', Tree('eq', [Token(a[0].type, a[0].value), replacetree])))
+            out.append(Tree('assume', [Tree('eq', [Token(a[0].type, a[0].value), replacetree])]))
         else:
             try:
                 if a[0].value != a[1].value:
-                    out.append(Tree('assume', Tree('eq', [Token(a[0].type, a[0].value), Token(a[1].type, a[1].value)])))
+                    out.append(Tree('assume', [Tree('eq', [Token(a[0].type, a[0].value), Token(a[1].type, a[1].value)])]))
                 if a[0].value == a[1].value:
-                    out.append(Tree('assume', Tree('eq', [Token(a[0].type, a[0].value), Token('NAME', varstring)])))
+                    out.append(Tree('assume', [Tree('eq', [Token(a[0].type, a[0].value), Token('NAME', varstring)])]))
             except AttributeError:
                 # Don't fail silently
                 print(a)
@@ -252,11 +252,13 @@ class ImpToGC(Transformer):
         Convert while statement to guarded command.
         """
         invs = self.assemble_invariants(w)
-        b = [Tree('assert', invs), self.assemble_havoc(w), Tree('assume', invs),
-             Tree('wpor', [Tree('block', [Tree('assume', w[0]), w[-1], Tree('assert', invs), Tree('assume', False)]),
-                   Tree('assume', self._not(w[0]))])]
+        b = [Tree('assert', [invs]), self.assemble_havoc(w), Tree('assume', [invs]),
+             Tree('wpor', [Tree('block', [Tree('assume', [w[0]]), w[-1], Tree('assert', [invs]), Tree('assume', [Token('NUMBER', 0)])]),
+                   Tree('assume', [self._not(w[0])])])]
         out = []
         for v in b:
+            if isinstance(type(v), type(None)):
+                continue
             if type(v) == list:
                 for a in v:
                     out.append(a)
@@ -265,31 +267,35 @@ class ImpToGC(Transformer):
         return out
 
     def ifstmt(self, i):
-        b = [Tree('assume', i[0]), i[1]]
+        b = [Tree('assume', [i[0]]), i[1]]
         out = []
         for v in b:
+            if isinstance(type(v), type(None)):
+                continue
             if type(v) == list:
                 for a in v:
                     out.append(a)
             else:
                 out.append(v)
         if len(i) > 2:
-            out = Tree('wpor', [Tree('block', [Tree('assume', i[0]), i[1]]),
-                              Tree('block', [Tree('assume', self._not(i[0])), i[2]])])
+            out = Tree('wpor', [Tree('block', [Tree('assume', [i[0]]), i[1]]),
+                              Tree('block', [Tree('assume', [self._not(i[0])]), i[2]])])
         return out
 
     def program(self, p):
         """
         Assemble program in the correct order.
         """
-        b = [[Token(p[0].type, p[0].value)], self.assemble_pre(p), p[-1], self.assemble_post(p)]
+        b = [p[0], self.assemble_pre(p), p[-1], self.assemble_post(p)]
         out = []
         for v in b:
+            if isinstance(type(v), type(None)):
+                continue
             if type(v) == list:
                 for a in v:
-                    out.append(a)
+                    out.extend([a])
             else:
-                out.append(v)
+                out.extend([v])
         return Tree('program', out)
 
     def parassign(self, p):
@@ -304,14 +310,23 @@ class ImpToGC(Transformer):
     def neg(self, n):
         return Tree('sub', [Token('NUMBER', 0), n[0]])
 
+class GcToWp(Transformer):
+
+    def wp(self, wp):
+        print(wp)
+
+def wpify(gc):
+    return Tree('wp', [gc, True])
+
 if __name__ == '__main__':
     imp_parser = ImpParser()
     tree = imp_parser.parse_file(sys.argv[1])
-    print(str(tree) + '\n')
     try:
         #print(tree.pretty())
         gc = ImpToGC().transform(tree)
-        print(str(gc) + '\n')
+        print(gc.pretty())
+        #print(gc.pretty())
+        #print(str(wp) + '\n')
         # vc = gc + ', true'
         # vc_list = vc.split(';')
         # vc_prev = vc_list.pop().strip()

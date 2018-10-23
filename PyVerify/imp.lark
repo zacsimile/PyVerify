@@ -44,6 +44,9 @@
 ?stmt: assign
     | ifstmt
     | whilestmt
+?assume: "assume" block
+?assert: "assert" block
+?havoc: "havoc" block
 ?block: stmt*
 ?pre: "pre" assn -> pre
 ?post: "post" assn -> post
