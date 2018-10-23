@@ -1,0 +1,60 @@
+?start: wp
+?add: aexp "+" aexp
+?sub: aexp "-" aexp
+    | "-" aexp -> neg
+?div: aexp "/" aexp
+?mult: aexp "*" aexp
+?mod: aexp "%" aexp
+?read: NAME "[" aexp "]"
+?aexp: NUMBER
+    | NAME
+    | read
+    | add
+    | sub
+    | mult
+    | div
+    | mod
+    | "(" aexp ")"
+?eq: aexp "=" aexp
+?neq: aexp "!=" aexp
+?leq: aexp "<=" aexp
+?geq: aexp ">=" aexp
+?lt: aexp "<" aexp
+?gt: aexp ">" aexp
+?comp: eq
+    | neq
+    | leq
+    | geq
+    | lt
+    | gt
+?bexp: comp
+    | "!" bexp -> bnot
+    | bexp "||" bexp -> bor
+    | bexp "&&" bexp -> band
+    | "(" bexp ")" -> bparen
+?atom: aexp
+    | bexp
+    | assn
+    | "true" -> const_true
+    | "false" -> const_false
+?assn: comp
+    | "!" assn -> bnot
+    | assn "||" assn -> bor
+    | assn "&&" assn -> band
+    | assn "==>" assn -> implies
+    | "forall" NAME* "," assn -> forall
+    | "exists" NAME* "," assn -> exists
+    | "(" assn ")" -> bparen
+?assume: "assume" atom -> assume
+?assert: "assert" atom -> assert
+?havoc: "havoc" atom -> havoc
+?stmt: assume | assert | havoc | atom
+?block: stmt*
+?wp: "wp" "(" block "," block ")"
+    | "wp" "(" wp "," block ")"
+    | "wp" "(" block "," wp ")"
+    | "wp" "(" wp "," wp ")"
+%import common.CNAME -> NAME
+%import common.NUMBER
+%import common.WS
+%ignore WS

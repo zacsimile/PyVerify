@@ -27,15 +27,11 @@
     | geq
     | lt
     | gt
-?bnot.2: "!" bexp
-?bor.4: bexp "||" bexp
-?band.3: bexp "&&" bexp
-?bparen.1: "(" bexp ")"
 ?bexp: comp
-    | bnot
-    | bor
-    | band
-    | bparen
+    | "!" bexp -> bnot
+    | bexp "||" bexp -> bor
+    | bexp "&&" bexp -> band
+    | "(" bexp ")" -> bparen
 ?assign: NAME ":=" aexp ";"
     | parassign
     | write
