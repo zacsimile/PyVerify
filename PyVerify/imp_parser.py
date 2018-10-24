@@ -1,8 +1,7 @@
+import os
 import sys
 from lark import Lark, Transformer, Tree
 from lark.lexer import Token
-from os.path import splitext
-from copy import deepcopy
 
 
 class ImpParser:
@@ -10,7 +9,7 @@ class ImpParser:
         """
         Lark parser, activate!
         """
-        self.imp_parser = Lark.open('imp.lark', parser='earley', lexer='standard')
+        self.imp_parser = Lark.open(os.path.join(os.path.dirname(__file__), 'imp.lark'), parser='earley', lexer='standard')
 
     def parse_file(self, fn):
         """
@@ -28,7 +27,7 @@ class ImpParser:
         """
 
         # Check that we have an IMP file
-        _, extension = splitext(fn)
+        _, extension = os.path.splitext(fn)
         if not (isinstance(fn, str) and extension == '.imp'):
             raise ValueError('File must be .imp.')
 
@@ -77,23 +76,27 @@ class ImpToGC(Transformer):
         if b.data == 'bparen':
             return self._not(b.children)
         if b.data == 'eq':
-            return [Tree('neq', b.children)]
+            return self.flatten([Tree('neq', b.children)])
         if b.data == 'neq':
-            return [Tree('eq', b.children)]
+            return self.flatten([Tree('eq', b.children)])
         if b.data == 'geq':
-            return [Tree('lt', b.children)]
+            return self.flatten([Tree('lt', b.children)])
         if b.data == 'lt':
-            return [Tree('geq', b.children)]
+            return self.flatten([Tree('geq', b.children)])
         if b.data == 'leq':
-            return [Tree('gt', b.children)]
+            return self.flatten([Tree('gt', b.children)])
         if b.data == 'gt':
-            return [Tree('leq', b.children)]
+            return self.flatten([Tree('leq', b.children)])
+        if b.data == 'forall':
+            return self.flatten([Tree('exists', b.children)])
+        if b.data == 'exists':
+            return self.flatten([Tree('forall', b.children)])
         if b.data == 'bor':
-            return [Tree('band', self._not(b.children))]
+            return self.flatten([Tree('band', self._not(b.children))])
         if b.data == 'band':
-            return [Tree('bor', self._not(b.children))]
+            return self.flatten([Tree('bor', self._not(b.children))])
         if b.data == 'not':
-            return [b.children]
+            return self.flatten([b.children])
         else:
             # Do not fail silently
             print(b)
@@ -111,7 +114,7 @@ class ImpToGC(Transformer):
             previous = pre.pop()
             while len(pre) > 0:
                 current = pre.pop()
-                previous = [Tree('band', [current, previous])]
+                previous = [Tree('band', self.flatten([current, previous]))]
             return Tree('assume', previous)
         if len(pre) == 1:
             return Tree('assume', pre)
@@ -128,7 +131,7 @@ class ImpToGC(Transformer):
             postvious = post.pop()
             while len(post) > 0:
                 current = post.pop()
-                postvious = [Tree('band', [current, postvious])]
+                postvious = [Tree('band', self.flatten([current, postvious]))]
             return Tree('assert', postvious)
         return Tree('assert', post)
 
@@ -144,7 +147,7 @@ class ImpToGC(Transformer):
             invious = inv.pop()
             while len(inv) > 0:
                 current = inv.pop()
-                invious = [Tree('band', [current, invious])]
+                invious = [Tree('band', self.flatten([current, invious]))]
             return invious
         return inv
 
@@ -229,16 +232,7 @@ class ImpToGC(Transformer):
         """
         Returns a tree block. Had to use this to "in place" clear out extra brackets generated from assign, etc.
         """
-        out = []
-        for v in b:
-            if isinstance(type(v), type(None)):
-                continue
-            if type(v) == list:
-                for a in v:
-                    out.extend([a])
-            else:
-                out.extend([v])
-        return Tree('block', out)
+        return self.flatten(b)
 
     def write(self, a):
         """
@@ -264,10 +258,7 @@ class ImpToGC(Transformer):
         b = self.flatten([Tree('assert', invs),
                           self.assemble_havoc(w),
                           Tree('assume', invs),
-                          Tree('wpor',
-                               [Tree('block',
-                                     b_mid),
-                           Tree('assume', self._not(w[0]))])])
+                          Tree('wpor', [Tree('block', b_mid), Tree('assume', self._not(w[0]))])])
         return b
 
     def ifstmt(self, i):
@@ -282,8 +273,8 @@ class ImpToGC(Transformer):
             else:
                 out.extend([v])
         if len(i) > 2:
-            out = Tree('wpor', [Tree('block', [Tree('assume', [i[0]]), i[1]]),
-                                Tree('block', [Tree('assume', self._not(i[0])), i[2]])])
+            out = Tree('wpor', self.flatten([Tree('block', self.flatten([Tree('assume', [i[0]]), i[1]])),
+                                Tree('block', self.flatten([Tree('assume', self._not(i[0])), i[2]]))]))
         return out
 
     def program(self, p):
@@ -413,6 +404,9 @@ class VcToSMT(Transformer):
     def band(self, a):
         return "(and " + " ".join(str(v) for v in a) + ")"
 
+    def bor(self, a):
+        return "(or " + " ".join(str(v) for v in a) + ")"
+
     def eq(self, e):
         return "(= " + ' '.join(str(v) for v in e) + ")"
 
@@ -452,6 +446,9 @@ class VcToSMT(Transformer):
     def forall(self, f):
         return "(forall (" + ' '.join('(%s Int)' % v for v in f[:-1]) + ') ' + str(f[-1]) + ')'
 
+    def exists(self, f):
+        return "(exists (" + ' '.join('(%s Int)' % v for v in f[:-1]) + ') ' + str(f[-1]) + ')'
+
     def const_true(self, t):
         return 'true'
 
@@ -460,27 +457,37 @@ class VcToSMT(Transformer):
 
 def get_variables(vc):
     out = []
-    for t in list(vc.iter_subtrees()):
-        for a in t.children:
-            try:
-                if a.type == 'NAME':
-                    out.extend([a])
-            except AttributeError:
-                pass
-    return ' '.join('(declare-fun %s () Int)' % v for v in list(set(out)))
+    arr = []
+    return_str = ''
 
-if __name__ == '__main__':
+    for t in list(vc.iter_subtrees()):
+        if t.data == 'read' or t.data == 'write':
+            arr.extend([t.children[0]])
+        else:
+            for a in t.children:
+                try:
+                    if a.type == 'NAME':
+                        out.extend([a])
+                except AttributeError:
+                    pass
+    return_str += ' '.join('(declare-fun %s () Int)' % v for v in list(set(out)-set(arr)))
+    return_str += ''.join(' (declare-const %s (Array Int Int))' % v for v in list(set(arr)))
+    return return_str
+
+def unit_parse(file):
     imp_parser = ImpParser()
-    tree = imp_parser.parse_file(sys.argv[1])
+    tree = imp_parser.parse_file(file)
     try:
         gc = ImpToGC().transform(tree)
-        #print(gc)
+        print(gc.pretty())
         vc = WpCalc().wpify(gc, [Tree('const_true', [])])
+        print(vc)
         var_string = get_variables(vc)
         vc_string = VcToSMT().transform(vc)
         program = var_string + " (push) (assert (not " + vc_string + ")) (check-sat) (pop) (exit)"
+        print(program)
         #print(gc.pretty())
-        print('\n' + vc_string + '\n')
+        #print('\n' + vc_string + '\n')
         with open('current.smt2', 'w') as fp:
             fp.write(program)
         import subprocess
@@ -488,9 +495,15 @@ if __name__ == '__main__':
             res = subprocess.check_output("z3 current.smt2", shell=True)
             if res.strip() == b'unsat':
                 print("valid")
+                return 0
             else:
                 print("invalid")
+                return 1
         except subprocess.CalledProcessError:
             print("SMT couldn't run")
     except AttributeError:
         raise
+
+
+if __name__ == '__main__':
+    unit_parse(sys.argv[1])
