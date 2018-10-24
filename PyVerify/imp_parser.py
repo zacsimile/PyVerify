@@ -118,6 +118,7 @@ class ImpToGC(Transformer):
             return Tree('assume', previous)
         if len(pre) == 1:
             return Tree('assume', pre)
+        return Token('const_true', [])
 
     def assemble_post(self, l):
         """
@@ -133,7 +134,10 @@ class ImpToGC(Transformer):
                 current = post.pop()
                 postvious = [Tree('band', self.flatten([current, postvious]))]
             return Tree('assert', postvious)
-        return Tree('assert', post)
+        if len(post) == 1:
+            Tree('assert', post)
+        return Token('const_true', [])
+
 
     def assemble_invariants(self, l):
         """
@@ -443,6 +447,9 @@ class VcToSMT(Transformer):
     def bparen(self, b):
         return ' '.join(str(v) for v in b)
 
+    def bnot(self, b):
+        return '(not' + ' '.join(str(v) for v in b) + ')'
+
     def forall(self, f):
         return "(forall (" + ' '.join('(%s Int)' % v for v in f[:-1]) + ') ' + str(f[-1]) + ')'
 
@@ -479,9 +486,9 @@ def unit_parse(file):
     tree = imp_parser.parse_file(file)
     try:
         gc = ImpToGC().transform(tree)
-        print(gc.pretty())
+        # print(gc.pretty())
         vc = WpCalc().wpify(gc, [Tree('const_true', [])])
-        print(vc)
+        # print(vc)
         var_string = get_variables(vc)
         vc_string = VcToSMT().transform(vc)
         program = var_string + " (push) (assert (not " + vc_string + ")) (check-sat) (pop) (exit)"
