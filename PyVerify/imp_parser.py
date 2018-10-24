@@ -1,9 +1,8 @@
 import sys
-import re
 from lark import Lark, Transformer, Tree
 from lark.lexer import Token
-from itertools import chain
-
+from os.path import splitext
+from copy import deepcopy
 
 
 class ImpParser:
@@ -29,15 +28,14 @@ class ImpParser:
         """
 
         # Check that we have an IMP file
-        if not (isinstance(fn, str) and fn.split('.')[1] == 'imp'):
+        _, extension = splitext(fn)
+        if not (isinstance(fn, str) and extension == '.imp'):
             raise ValueError('File must be .imp.')
 
         # Read the file data in
         stream = open(fn, 'r')
         data = stream.read()
         stream.close()
-
-        #print(data)
 
         # Parse the commands to an AST
         ast = self.parse(data)
@@ -262,20 +260,15 @@ class ImpToGC(Transformer):
         Convert while statement to guarded command.
         """
         invs = self.assemble_invariants(w)
-        b = self.flatten([Tree('assert', invs), self.assemble_havoc(w), Tree('assume', invs),
-             Tree('wpor', [Tree('block', [Tree('assume', [w[0]]), w[-1], Tree('assert', invs), Tree('assume', [Token('const_false', False)])]),
+        b_mid = self.flatten([Tree('assume', [w[0]]), w[-1], Tree('assert', invs), Tree('assume', [Tree('const_false', [])])])
+        b = self.flatten([Tree('assert', invs),
+                          self.assemble_havoc(w),
+                          Tree('assume', invs),
+                          Tree('wpor',
+                               [Tree('block',
+                                     b_mid),
                            Tree('assume', self._not(w[0]))])])
-        out = []
-        for v in b:
-            if isinstance(type(v), type(None)):
-                continue
-            if type(v) == list:
-                for a in v:
-                    out.extend([a])
-            else:
-                out.extend([v])
-        if len(out) > 0:
-            return out
+        return b
 
     def ifstmt(self, i):
         b = [Tree('assume', [i[0]]), i[1]]
@@ -352,7 +345,6 @@ class WpCalc:
                     out.extend([Token(v.type, v.value)])
             if type(v) == Tree:
                 out.extend([Tree(v.data, self.replacetree(v, find_token, replace_token))])
-        #print(out)
         return out
 
     def flatten(self, l):
@@ -362,10 +354,29 @@ class WpCalc:
                 out.extend([a])
             else:
                 out.extend(a)
+        #print(out)
         return out
 
+    # def group_and(self, group):
+    #     a = self.flatten(group)
+    #     if len(a) > 2:
+    #         return self.flatten([Tree('band', self.flatten([a[0], self.group_and(a[1:])]))])
+    #     else:
+    #         return self.flatten([a])
+    #     # return self.flatten(group)
+    #
+    # def group_implies(self, group):
+    #     a = self.flatten(group)
+    #     if len(a) > 2:
+    #         return self.flatten([Tree('implies', self.flatten([a[0], self.group_implies(a[1:])]))])
+    #     else:
+    #         return self.flatten([a])
+    #     # return self.flatten(group)
+
     def wpify(self, gc, wp):
-        #print(wp)
+        """
+        Convert guarded commands to weakest pres.
+        """
         if type(gc) == Tree:
             if gc.data == 'assert':
                 return Tree('band', self.flatten([gc.children, wp]))
@@ -374,7 +385,7 @@ class WpCalc:
             if gc.data == 'havoc':
                 self.tmpcount += 1
                 varstring = 'pa_' + str(self.tmpcount)
-                return self.wpify(gc.children, self.replacetree(wp, gc.children[0], varstring))
+                return Tree(wp.data, self.replacetree(wp, gc.children[0], varstring))
             if gc.data == 'wpor':
                 return Tree('band', self.flatten([self.wpify(gc.children[0], wp), self.wpify(gc.children[1], wp)]))
             else:
@@ -400,7 +411,7 @@ class VcToSMT(Transformer):
         return "(=> " + ' '.join(str(v) for v in i) + ")"
 
     def band(self, a):
-        return "(and " + ' '.join(str(v) for v in a) + ")"
+        return "(and " + " ".join(str(v) for v in a) + ")"
 
     def eq(self, e):
         return "(= " + ' '.join(str(v) for v in e) + ")"
@@ -436,19 +447,16 @@ class VcToSMT(Transformer):
         return "(mod " + ' '.join(str(v) for v in m) + ")"
 
     def bparen(self, b):
-        return ''.join(str(v) for v in b)
+        return ' '.join(str(v) for v in b)
 
     def forall(self, f):
         return "(forall (" + ' '.join('(%s Int)' % v for v in f[:-1]) + ') ' + str(f[-1]) + ')'
 
-    def const_false(self, f):
-        return "false"
-
     def const_true(self, t):
-        return "true"
+        return 'true'
 
-    def program(self, p):
-        return '(assert ' + ' '.join(str(v) for v in p) + ')(check-sat)(exit)'
+    def const_false(self, f):
+        return 'false'
 
 def get_variables(vc):
     out = []
@@ -465,45 +473,24 @@ if __name__ == '__main__':
     imp_parser = ImpParser()
     tree = imp_parser.parse_file(sys.argv[1])
     try:
-        #print(tree.pretty())
         gc = ImpToGC().transform(tree)
-        #print(gc.pretty())
         #print(gc)
-        #print(wpify(gc).pretty())
-        #print(ComputeWP().compute(gc.children))
-        vc = WpCalc().wpify(gc, Token('const_true', True))
+        vc = WpCalc().wpify(gc, [Tree('const_true', [])])
         var_string = get_variables(vc)
-        #print(vc.pretty())
         vc_string = VcToSMT().transform(vc)
-        vc_string = vc_string.replace('False', 'false')
-        vc_string = vc_string.replace('True', 'true')
-        program = var_string + "(assert " + vc_string + ") (check-sat) (exit)"
+        program = var_string + " (push) (assert (not " + vc_string + ")) (check-sat) (pop) (exit)"
+        #print(gc.pretty())
+        print('\n' + vc_string + '\n')
         with open('current.smt2', 'w') as fp:
             fp.write(program)
         import subprocess
         try:
             res = subprocess.check_output("z3 current.smt2", shell=True)
-            if res.strip() == b'sat':
+            if res.strip() == b'unsat':
                 print("valid")
             else:
                 print("invalid")
         except subprocess.CalledProcessError:
-            print("invalid")
-        #print(gc.pretty())
-        #print(str(wp) + '\n')
-        # vc = gc + ', true'
-        # vc_list = vc.split(';')
-        # vc_prev = vc_list.pop().strip()
-        # vc_nested = 'wp(' + vc_prev + ')'
-        # while len(vc_list) > 0:
-        #     vc_new = vc_list.pop().strip()
-        #     vc_anded = vc_new.split('|||')
-        #     if len(vc_anded) > 1:
-        #         res = vc_prev.split(',')[-1]
-        #         vc_nested = 'wp(' + vc_anded[0] + ', ' + res + ') && ' + vc_nested
-        #     else:
-        #         vc_nested = 'wp(' + vc_new + ', ' + vc_nested + ')'
-        #     vc_prev = vc_new
-        # print(vc_nested)
+            print("SMT couldn't run")
     except AttributeError:
         raise

@@ -59,6 +59,8 @@
     | "forall" NAME* "," assn -> forall
     | "exists" NAME* "," assn -> exists
     | "(" assn ")" -> bparen
+    | "true" -> const_true
+    | "false" -> const_false
 %import common.CNAME -> NAME
 %import common.NUMBER
 %import common.WS
