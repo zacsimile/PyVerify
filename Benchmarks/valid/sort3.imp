@@ -1,0 +1,28 @@
+program sort3
+  post a[0] <= a[1] && a[1] <= a[2]
+is
+  if a[0] > a[1] then
+    tmp := a[0];
+    a[0] := a[1];
+    a[1] := tmp;
+  else
+    a[0] := a[0];
+  end
+  
+  if a[1] > a[2] then
+    tmp := a[1];
+    a[1] := a[2];
+    a[2] := tmp;
+  else
+    a[0] := a[0];
+  end
+  
+  if a[0] > a[1] then
+    tmp := a[0];
+    a[0] := a[1];
+    a[1] := tmp;
+  else
+    a[0] := a[0];
+  end
+end
+

@@ -1,0 +1,7 @@
+program truth 
+pre true
+post true 
+is
+
+end
+

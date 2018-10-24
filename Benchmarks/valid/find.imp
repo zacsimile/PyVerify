@@ -1,0 +1,12 @@
+program find
+  pre  0 <= N
+  post a[n] = x || forall i, (0 <= i && i < N) ==> a[i] != x
+is
+  n := 0;
+  while n < N && a[n] != x
+    inv 0 <= n && n <= N
+    inv forall i, (0 <= i && i < n) ==> a[i] != x
+  do
+    n := n + 1;
+  end
+end

@@ -1,0 +1,13 @@
+program sum
+pre x > 0
+post n = (x*(x+1))/2
+is
+    i := 0;
+    n := 0;
+    while i < x
+    inv 0 <= i && i < x
+    do
+	    i := i + 1;
+	    n := n + i;
+	end
+end

@@ -1,0 +1,18 @@
+program findMax
+    pre N > 0
+    post forall j, j >= 0 && j < N ==> max >= a[j]
+    post exists j, j >= 0 && j < N && max = a[j]
+is
+    max := a[0];
+    i := 1;
+    while i < N
+        inv i <= N
+        inv forall j, j >= 0 && j <= i ==> max >= a[j]
+        inv exists j, j >= 0 && j <= i && max = a[j]
+    do
+        if a[i] > max then
+            max := a[i];
+        end
+        i := i + 1;
+    end
+end

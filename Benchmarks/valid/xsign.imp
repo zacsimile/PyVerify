@@ -1,0 +1,6 @@
+program xsign
+pre x > 0
+post x > 1
+is
+	x := x + 1;
+end

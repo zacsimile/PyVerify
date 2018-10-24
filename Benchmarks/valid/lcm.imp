@@ -1,0 +1,16 @@
+program LCM
+    pre 0 <= A && 0 <= B
+    pre A != 0 || B != 0
+    post A<=lcm && lcm<=A*B && B<=lcm
+is
+    gcd := 1;
+    j := 1;
+    while j <= A || j <= B
+        inv A % gcd = 0 && B % gcd = 0
+    do
+        if A % j = 0 && B % j = 0 then
+            gcd := j;
+        end
+    end
+    lcm := (A*B)/gcd;
+end
