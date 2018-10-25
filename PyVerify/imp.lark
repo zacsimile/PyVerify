@@ -21,17 +21,21 @@
 ?geq: aexp ">=" aexp
 ?lt: aexp "<" aexp
 ?gt: aexp ">" aexp
-?comp: eq
+?comp.3: eq
     | neq
     | leq
     | geq
     | lt
     | gt
+?bnot.12: "!" bexp -> bnot
+?bor.10: bexp "||" bexp -> bor
+?band.11: bexp "&&" bexp -> band
+?bparen.13: "(" bexp ")" -> bparen
 ?bexp: comp
-    | "!" bexp -> bnot
-    | bexp "||" bexp -> bor
-    | bexp "&&" bexp -> band
-    | "(" bexp ")" -> bparen
+    | bnot
+    | bor
+    | band
+    | bparen
 ?assign: NAME ":=" aexp ";"
     | parassign
     | write
@@ -51,14 +55,21 @@
 ?pre: "pre" assn -> pre
 ?post: "post" assn -> post
 ?program: "program" NAME pre* post* "is" block "end"
+?assnparen.9: "(" assn ")" -> bparen
+?assnand.5: assn "&&" assn -> band
+?assnnot.6: "!" assn -> bnot
+?assnnor.4: assn "||" assn -> bor
+?assnimp.2: assn "==>" assn -> implies
+?assnforall.8: "forall" NAME* "," assn -> forall
+?assnexists.7: "exists" NAME* "," assn -> exists
 ?assn: comp
-    | "!" assn -> bnot
-    | assn "||" assn -> bor
-    | assn "&&" assn -> band
-    | assn "==>" assn -> implies
-    | "forall" NAME* "," assn -> forall
-    | "exists" NAME* "," assn -> exists
-    | "(" assn ")" -> bparen
+    | assnnot
+    | assnnor
+    | assnand
+    | assnimp
+    | assnforall
+    | assnexists
+    | assnparen
     | "true" -> const_true
     | "false" -> const_false
 %import common.CNAME -> NAME

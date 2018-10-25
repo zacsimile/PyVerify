@@ -9,7 +9,7 @@ class ImpParser:
         """
         Lark parser, activate!
         """
-        self.imp_parser = Lark.open(os.path.join(os.path.dirname(__file__), 'imp.lark'), parser='earley', lexer='standard')
+        self.imp_parser = Lark.open(os.path.join(os.path.dirname(__file__), 'imp.lark'), parser='earley')
 
     def parse_file(self, fn):
         """
@@ -484,7 +484,7 @@ def unit_parse(file):
     imp_parser = ImpParser()
     tree = imp_parser.parse_file(file)
     try:
-        #print(tree)
+        #print(tree.pretty())
         gc = ImpToGC().transform(tree)
         #print(gc.pretty())
         vc = WpCalc().wpify(gc, [Tree('const_true', [])])
@@ -492,7 +492,7 @@ def unit_parse(file):
         var_string = get_variables(vc)
         vc_string = VcToSMT().transform(vc)
         program = var_string + " (push) (assert (not " + vc_string + ")) (check-sat) (pop) (exit)"
-        print(program)
+        #print(program)
         #print(gc.pretty())
         #print('\n' + vc_string + '\n')
         with open('current.smt2', 'w') as fp:
