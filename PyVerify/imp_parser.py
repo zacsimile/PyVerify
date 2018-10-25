@@ -104,7 +104,7 @@ class ImpToGC(Transformer):
 
     def assemble_pre(self, l):
         """
-        Group preconditions.
+        Group conditions.
         """
         pre = []
         for t in l:
@@ -118,7 +118,7 @@ class ImpToGC(Transformer):
             return Tree('assume', previous)
         if len(pre) == 1:
             return Tree('assume', pre)
-        return Token('const_true', [])
+        return pre
 
     def assemble_post(self, l):
         """
@@ -135,9 +135,8 @@ class ImpToGC(Transformer):
                 postvious = [Tree('band', self.flatten([current, postvious]))]
             return Tree('assert', postvious)
         if len(post) == 1:
-            Tree('assert', post)
-        return Token('const_true', [])
-
+            return Tree('assert', post)
+        return post
 
     def assemble_invariants(self, l):
         """
@@ -153,6 +152,8 @@ class ImpToGC(Transformer):
                 current = inv.pop()
                 invious = [Tree('band', self.flatten([current, invious]))]
             return invious
+        if len(inv) == 1:
+            return inv
         return inv
 
     def assemble_havoc(self, l):
@@ -170,7 +171,7 @@ class ImpToGC(Transformer):
                 hav.extend(self.assemble_havoc(t))
         return hav
 
-    def replacetree(self, t, find_token, replace_token):
+    def replace_tree(self, t, find_token, replace_token):
         """
         Recursively iterate through tree t and replace find_token with replace_token. Used for replacement rule.
 
@@ -196,7 +197,7 @@ class ImpToGC(Transformer):
                 else:
                     out.extend([Token(v.type, v.value)])
             if type(v) == Tree:
-                out.extend([Tree(v.data, self.replacetree(v, find_token, replace_token))])
+                out.extend([Tree(v.data, self.replace_tree(v, find_token, replace_token))])
         return out
 
     def assign(self, a):
@@ -218,8 +219,11 @@ class ImpToGC(Transformer):
         out.append(Tree('assume', [Tree('eq', [Token('NAME', varstring), Token(a[0].type, a[0].value)])]))
         out.append(Tree('havoc', [Token(a[0].type, a[0].value)]))
         if type(a[1]) == Tree:
-            replacetree = Tree(a[1].data, self.replacetree(a[1], a[0], varstring))
-            out.append(Tree('assume', [Tree('eq', [Token(a[0].type, a[0].value), replacetree])]))
+            # if a[1].data == 'write':
+            #     self.tmpcount += 1
+            #     varstring = 'tmp_' + str(self.tmpcount)
+            replace_tree = Tree(a[1].data, self.replace_tree(a[1], a[0], varstring))
+            out.append(Tree('assume', [Tree('eq', [Token(a[0].type, a[0].value), replace_tree])]))
         else:
             try:
                 if a[0].value != a[1].value:
@@ -242,6 +246,7 @@ class ImpToGC(Transformer):
         """
         Convert array write to a guaraded command.
         """
+        #print('write', a)
         return self.assign([a[0], Tree('write', a)])
 
     def flatten(self, l):
@@ -278,24 +283,14 @@ class ImpToGC(Transformer):
                 out.extend([v])
         if len(i) > 2:
             out = Tree('wpor', self.flatten([Tree('block', self.flatten([Tree('assume', [i[0]]), i[1]])),
-                                Tree('block', self.flatten([Tree('assume', self._not(i[0])), i[2]]))]))
+                                             Tree('block', self.flatten([Tree('assume', self._not(i[0])), i[2]]))]))
         return out
 
     def program(self, p):
         """
         Assemble program in the correct order.
         """
-        b = [p[0], self.assemble_pre(p), p[-1], self.assemble_post(p)]
-        out = []
-        for v in b:
-            if isinstance(type(v), type(None)):
-                continue
-            if type(v) == list:
-                for a in v:
-                    out.extend([a])
-            else:
-                out.extend([v])
-        return Tree('program', out)
+        return Tree('program', self.flatten([p[0], self.assemble_pre(p), p[-1], self.assemble_post(p)]))
 
     def parassign(self, p):
         """
@@ -309,11 +304,12 @@ class ImpToGC(Transformer):
     def neg(self, n):
         return Tree('sub', [Token('NUMBER', 0), n[0]])
 
+
 class WpCalc:
     def __init__(self):
         self.tmpcount = -1
 
-    def replacetree(self, t, find_token, replace_token):
+    def replace_tree(self, t, find_token, replace_token):
         """
         Recursively iterate through tree t and replace find_token with replace_token. Used for replacement rule.
 
@@ -339,7 +335,7 @@ class WpCalc:
                 else:
                     out.extend([Token(v.type, v.value)])
             if type(v) == Tree:
-                out.extend([Tree(v.data, self.replacetree(v, find_token, replace_token))])
+                out.extend([Tree(v.data, self.replace_tree(v, find_token, replace_token))])
         return out
 
     def flatten(self, l):
@@ -351,22 +347,6 @@ class WpCalc:
                 out.extend(a)
         #print(out)
         return out
-
-    # def group_and(self, group):
-    #     a = self.flatten(group)
-    #     if len(a) > 2:
-    #         return self.flatten([Tree('band', self.flatten([a[0], self.group_and(a[1:])]))])
-    #     else:
-    #         return self.flatten([a])
-    #     # return self.flatten(group)
-    #
-    # def group_implies(self, group):
-    #     a = self.flatten(group)
-    #     if len(a) > 2:
-    #         return self.flatten([Tree('implies', self.flatten([a[0], self.group_implies(a[1:])]))])
-    #     else:
-    #         return self.flatten([a])
-    #     # return self.flatten(group)
 
     def wpify(self, gc, wp):
         """
@@ -380,7 +360,7 @@ class WpCalc:
             if gc.data == 'havoc':
                 self.tmpcount += 1
                 varstring = 'pa_' + str(self.tmpcount)
-                return Tree(wp.data, self.replacetree(wp, gc.children[0], varstring))
+                return Tree(wp.data, self.replace_tree(wp, gc.children[0], varstring))
             if gc.data == 'wpor':
                 return Tree('band', self.flatten([self.wpify(gc.children[0], wp), self.wpify(gc.children[1], wp)]))
             else:
@@ -393,6 +373,7 @@ class WpCalc:
                 return wp
         if type(gc) == Token:
             return wp
+
 
 class VcToSMT(Transformer):
 
@@ -445,7 +426,7 @@ class VcToSMT(Transformer):
         return "(mod " + ' '.join(str(v) for v in m) + ")"
 
     def bparen(self, b):
-        return ' '.join(str(v) for v in b)
+        return ' '.join('( ' + str(v) + ' )' for v in b)
 
     def bnot(self, b):
         return '(not' + ' '.join(str(v) for v in b) + ')'
@@ -461,6 +442,7 @@ class VcToSMT(Transformer):
 
     def const_false(self, f):
         return 'false'
+
 
 def get_variables(vc):
     out = []
@@ -478,15 +460,17 @@ def get_variables(vc):
                 except AttributeError:
                     pass
     return_str += ' '.join('(declare-fun %s () Int)' % v for v in list(set(out)-set(arr)))
-    return_str += ''.join(' (declare-const %s (Array Int Int))' % v for v in list(set(arr)))
+    return_str += ' ' + ' '.join('(declare-const %s (Array Int Int))' % v for v in list(set(arr)))
     return return_str
+
 
 def unit_parse(file):
     imp_parser = ImpParser()
     tree = imp_parser.parse_file(file)
     try:
+        #print(tree)
         gc = ImpToGC().transform(tree)
-        # print(gc.pretty())
+        #print(gc.pretty())
         vc = WpCalc().wpify(gc, [Tree('const_true', [])])
         # print(vc)
         var_string = get_variables(vc)
@@ -508,6 +492,7 @@ def unit_parse(file):
                 return 1
         except subprocess.CalledProcessError:
             print("SMT couldn't run")
+            #print("invalid")
     except AttributeError:
         raise
 

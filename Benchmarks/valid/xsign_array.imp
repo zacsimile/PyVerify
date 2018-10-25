@@ -1,0 +1,6 @@
+program xsign_array
+pre x[0] > 0
+post x[0] > 1
+is
+	x[0] := x[0] + 1;
+end

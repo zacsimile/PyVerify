@@ -3,7 +3,7 @@ pre x <= 0
 post x = 6
 is
 	while x <= 5
-	inv x<= 6
+	inv x <= 6
 	do
 		x := x + 1;
 	end
