@@ -10,6 +10,7 @@ is
     i := 0;
     while i < bound - 1
       inv forall j k, bound <= j ==> j < k ==> k < n ==> a[j] <= a[k]
+
     do
       if a[i] > a[i+1] then
         t := a[i];

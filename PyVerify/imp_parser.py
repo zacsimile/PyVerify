@@ -10,7 +10,7 @@ class ImpParser:
         """
         Lark parser, activate!
         """
-        self.imp_parser = Lark.open(os.path.join(os.path.dirname(__file__), 'imp.lark'), parser='earley')
+        self.imp_parser = Lark.open(os.path.join(os.path.dirname(__file__), 'imp.lark'), parser='earley', lexer='standard')
 
     def fix_forall(self, data):
         """
@@ -20,7 +20,6 @@ class ImpParser:
         tmp = re.sub(r'(forall \w+,) ([^\n]*)\n', r'\1 (\2)\n', data)
         data = re.sub(r'(exists \w+,) ([^\n]*)\n', r'\1 (\2)\n', tmp)
         return data
-
 
     def parse_file(self, fn):
         """
