@@ -426,7 +426,7 @@ class VcToSMT(Transformer):
         return "(mod " + ' '.join(str(v) for v in m) + ")"
 
     def bparen(self, b):
-        return ' '.join('( ' + str(v) + ' )' for v in b)
+        return ' '.join(str(v) for v in b)
 
     def bnot(self, b):
         return '(not' + ' '.join(str(v) for v in b) + ')'
@@ -447,9 +447,13 @@ class VcToSMT(Transformer):
 def get_variables(vc):
     out = []
     arr = []
+    eq = []
     return_str = ''
 
     for t in list(vc.iter_subtrees()):
+        if t.data == 'eq':
+            eq.extend([t.children])
+
         if t.data == 'read' or t.data == 'write':
             arr.extend([t.children[0]])
         else:
@@ -459,6 +463,18 @@ def get_variables(vc):
                         out.extend([a])
                 except AttributeError:
                     pass
+
+    # Make sure we don't misclassify arrays as variables
+    for t in eq:
+        if (t[0] in out and t[1] in arr):
+            arr.extend([t[0]])
+            while t[0] in out:
+                out.remove(t[0])
+        if (t[1] in out and t[0] in arr):
+            arr.extend([t[1]])
+            while t[1] in out:
+                out.remove(t[1])
+
     return_str += ' '.join('(declare-fun %s () Int)' % v for v in list(set(out)-set(arr)))
     return_str += ' ' + ' '.join('(declare-const %s (Array Int Int))' % v for v in list(set(arr)))
     return return_str
