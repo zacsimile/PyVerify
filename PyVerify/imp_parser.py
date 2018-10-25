@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 from lark import Lark, Transformer, Tree
 from lark.lexer import Token
 
@@ -10,6 +11,16 @@ class ImpParser:
         Lark parser, activate!
         """
         self.imp_parser = Lark.open(os.path.join(os.path.dirname(__file__), 'imp.lark'), parser='earley')
+
+    def fix_forall(self, data):
+        """
+        Lark parser's priority arguments aren't working right now. As such, we need to add parentheses around forall
+        and exists clauses to ensure their priority is correct.
+        """
+        tmp = re.sub(r'(forall \w+,) ([^\n]*)\n', r'\1 (\2)\n', data)
+        data = re.sub(r'(exists \w+,) ([^\n]*)\n', r'\1 (\2)\n', tmp)
+        return data
+
 
     def parse_file(self, fn):
         """
@@ -37,7 +48,7 @@ class ImpParser:
         stream.close()
 
         # Parse the commands to an AST
-        ast = self.parse(data)
+        ast = self.parse(self.fix_forall(data))
 
         return ast
 

@@ -1,5 +1,5 @@
 program abs
-   post x > 0
+   post x >= 0
 is
    if x > 0 then
       x := x;

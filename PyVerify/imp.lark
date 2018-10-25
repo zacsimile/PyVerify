@@ -1,41 +1,25 @@
 ?start: program
-?add: aexp "+" aexp
-?sub: aexp "-" aexp
-    | "-" aexp -> neg
-?div: aexp "/" aexp
-?mult: aexp "*" aexp
-?mod: aexp "%" aexp
-?read: NAME "[" aexp "]"
 ?aexp: NUMBER
     | NAME
-    | read
-    | add
-    | sub
-    | mult
-    | div
-    | mod
+    | NAME "[" aexp "]" -> read
+    | aexp "+" aexp -> add
+    | aexp "-" aexp -> sub
+    | "-" aexp -> neg
+    | aexp "*" aexp -> mult
+    | aexp "/" aexp -> div
+    | aexp "%" aexp -> mod
     | "(" aexp ")"
-?eq: aexp "=" aexp
-?neq: aexp "!=" aexp
-?leq: aexp "<=" aexp
-?geq: aexp ">=" aexp
-?lt: aexp "<" aexp
-?gt: aexp ">" aexp
-?comp.3: eq
-    | neq
-    | leq
-    | geq
-    | lt
-    | gt
-?bnot.12: "!" bexp -> bnot
-?bor.10: bexp "||" bexp -> bor
-?band.11: bexp "&&" bexp -> band
-?bparen.13: "(" bexp ")" -> bparen
+?comp: aexp "=" aexp -> eq
+    | aexp "!=" aexp -> neq
+    | aexp "<=" aexp -> leq
+    | aexp ">=" aexp -> geq
+    | aexp "<" aexp -> lt
+    | aexp ">" aexp -> gt
 ?bexp: comp
-    | bnot
-    | bor
-    | band
-    | bparen
+    | "!" bexp -> bnot
+    | bexp "||" bexp -> bor
+    | bexp "&&" bexp -> band
+    | "(" bexp ")" -> bparen
 ?assign: NAME ":=" aexp ";"
     | parassign
     | write
@@ -55,21 +39,14 @@
 ?pre: "pre" assn -> pre
 ?post: "post" assn -> post
 ?program: "program" NAME pre* post* "is" block "end"
-?assnparen.9: "(" assn ")" -> bparen
-?assnand.5: assn "&&" assn -> band
-?assnnot.6: "!" assn -> bnot
-?assnnor.4: assn "||" assn -> bor
-?assnimp.2: assn "==>" assn -> implies
-?assnforall.8: "forall" NAME* "," assn -> forall
-?assnexists.7: "exists" NAME* "," assn -> exists
 ?assn: comp
-    | assnnot
-    | assnnor
-    | assnand
-    | assnimp
-    | assnforall
-    | assnexists
-    | assnparen
+    | "!" assn -> bnot
+    | assn "||" assn -> bor
+    | assn "&&" assn -> band
+    | assn "==>" assn -> implies
+    | "forall" NAME* "," assn -> forall
+    | "exists" NAME* "," assn -> exists
+    | "(" assn ")" -> bparen
     | "true" -> const_true
     | "false" -> const_false
 %import common.CNAME -> NAME
